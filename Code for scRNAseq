@@ -1,0 +1,364 @@
+# Dendritic Cell Analysis Pipeline (Cleaned)
+# Version: 2024.04.0
+
+# ============================
+# 1. Load Required Packages
+# ============================
+library(Seurat)
+library(tidyverse)
+library(ggpubr)
+library(Matrix)
+library(dplyr)
+library(patchwork)
+library(ggplot2)
+library(openxlsx)
+library(CellChat)
+
+# ============================
+# 2. Load Data
+# ============================
+DC_count <- read.delim("~/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Dendritic Cells counts and stage files/DC_count.txt")
+DC_stage <- read.delim("~/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Dendritic Cells counts and stage files/DC_stage.txt")
+
+# ============================
+# 3. Preprocess Metadata
+# ============================
+DC_stage <- DC_stage %>% 
+  mutate(newclass = case_when(
+    x == "Early-pro" ~ 1,
+    x == "Mid-pro" ~ 2,
+    x == "Late-pro" ~ 3,
+    x == "Early-sec" ~ 4,
+    x == "Mid-sec" ~ 5,
+    x == "Late-sec" ~ 6,
+    x == "Late-Late-sec" ~ 7,
+    x == "menstrual" ~ 8,
+    x == "decb" ~ 9,
+    x == "decp" ~ 10
+  )) %>% 
+  mutate(across(x, ~as.factor(.)),
+         Decb = as.integer(x == "decb"),
+         Decp = as.integer(x == "decp"),
+         Early_pro = as.integer(x == "Early-pro"),
+         Mid_pro = as.integer(x == "Mid-pro"),
+         Late_pro = as.integer(x == "Late-pro"),
+         Early_sec = as.integer(x == "Early-sec"),
+         Mid_sec = as.integer(x == "Mid-sec"),
+         Late_sec = as.integer(x == "Late-sec"),
+         Late_Late_sec = as.integer(x == "Late-Late-sec"),
+         Menstrual = as.integer(x == "menstrual"))
+
+# ============================
+# 4. Confirm Alignment and Combine Data
+# ============================
+stopifnot(all(rownames(DC_stage) == colnames(DC_count)))
+DC_count_data <- rbind(t(DC_stage)[3:12,], DC_count)
+rownames(DC_count_data)[1] <- "Stages"
+
+# ============================
+# 5. Create Seurat Object
+# ============================
+DC_count_seurat <- CreateSeuratObject(counts = DC_count_data, 
+                                      project = "Dendritic Cells",
+                                      min.cells = 3, 
+                                      min.features = 200,
+                                      meta.data = DC_stage)
+
+# ============================
+# 6. Quality Control
+# ============================
+DC_count_seurat[["percent.mt"]] <- PercentageFeatureSet(DC_count_seurat, pattern = "^MT-")
+VlnPlot(DC_count_seurat, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+FeatureScatter(DC_count_seurat, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+
+# ============================
+# 7. Normalize & Scale
+# ============================
+DC_count_seurat <- NormalizeData(DC_count_seurat)
+DC_count_seurat <- FindVariableFeatures(DC_count_seurat)
+top10 <- head(VariableFeatures(DC_count_seurat), 10)
+VariableFeaturePlot(DC_count_seurat) %>% LabelPoints(points = top10, repel = TRUE)
+DC_count_seurat <- ScaleData(DC_count_seurat)
+
+# ============================
+# 8. Dimensionality Reduction
+# ============================
+DC_count_seurat <- RunPCA(DC_count_seurat)
+DimPlot(DC_count_seurat, reduction = "pca")
+VizDimLoadings(DC_count_seurat, dims = 1:2, reduction = "pca")
+ElbowPlot(DC_count_seurat)
+
+# ============================
+# 9. Clustering & UMAP
+# ============================
+DC_count_seurat <- FindNeighbors(DC_count_seurat, dims = 1:12)
+DC_count_seurat <- FindClusters(DC_count_seurat, resolution = 0.5)
+DC_count_seurat <- RunUMAP(DC_count_seurat, dims = 1:12)
+DimPlot(DC_count_seurat, reduction = "umap")
+
+# ============================
+# 10. Marker Analysis: Define Marker Gene Lists
+# ============================
+marker_lists <- list(
+  cDC1 = c("CADM1", "ITGAX", "BDCA-3", "CD226", "CLEC9A", "XCR1"),
+  cDC2 = c("ITGAX", "CD141", "CD172A", "CD1A", "CD1C", "CD64", "CLEC10A", "FCER1A"),
+  pDC = c("IL3RA", "NRP1", "CD304"),
+  DC3 = c("CD163", "CD1C", "CLEC10A", "FCER1A", "S100A8", "S100A9"),
+  moDC = c("CD172A", "CD14", "CD1A", "CD1C", "CD226", "CD64", "CD88", "CLEC10A", "FCER1A"),
+  DC_progenitors = c("CD123", "CD117", "CD33", "CD303", "CD45RA"),
+  DC_subtypes_I = c("CD123", "ILT7", "CD303", "CD1A", "CD83"),
+  DC_subtypes_II = c("LYZ", "IRF8", "CD14"),
+  other_markers = c("CD11C", "ITGAM", "MAC1A", "CR3A", "MO1A", "CD45", "CD45RA")
+)
+
+for (name in names(marker_lists)) {
+  VlnPlot(DC_count_seurat, features = marker_lists[[name]], ncol = 3)
+}
+
+# ============================
+# 11. Expression Dynamics and Receptor-Ligand Analysis
+# ============================
+# Expression Dynamics of AXL Gene Across Menstrual Stages
+
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+library(openxlsx)
+
+# Fetch and filter data for AXL expression
+data <- FetchData(DC_count_seurat, vars = c("AXL", "newclass", "seurat_clusters"))
+data_filtered <- data %>% filter(AXL > 0)
+
+# Map numeric stages to named menstrual phases
+data_filtered <- data_filtered %>%
+  mutate(newclass = case_when(
+    newclass == 1 ~ "Early-pro",
+    newclass == 2 ~ "Mid-pro",
+    newclass == 3 ~ "Late-pro",
+    newclass == 4 ~ "Early-sec",
+    newclass == 5 ~ "Mid-sec",
+    newclass == 6 ~ "Late-sec",
+    newclass == 7 ~ "Late-Late-sec",
+    newclass == 8 ~ "menstrual",
+    newclass == 9 ~ "decb",
+    newclass == 10 ~ "decp",
+    TRUE ~ as.character(newclass)
+  ))
+
+# Define factor levels
+stage_order <- c("menstrual", "Early-pro", "Mid-pro", "Late-pro", 
+                 "Early-sec", "Mid-sec", "Late-sec", "Late-Late-sec", 
+                 "decb", "decp")
+data_filtered$newclass <- factor(data_filtered$newclass, levels = stage_order)
+
+# Save AXL expression table
+write.xlsx(data_filtered, file = "AXL_gene_expression.xlsx", sheetName = "AXL", rowNames = FALSE)
+
+# Scatter plot of AXL expression across stages
+ggplot(data_filtered, aes(x = newclass, y = AXL, color = as.factor(seurat_clusters))) +
+  geom_point() +
+  theme_minimal() +
+  labs(y = "Expression level of AXL", x = "", color = "Seurat Clusters") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Combined plot with secondary Y-axis for cell count
+data_summary <- data_filtered %>%
+  group_by(newclass) %>%
+  summarise(Count = n())
+
+plot1 <- ggplot(data_filtered, aes(x = newclass, y = AXL)) +
+  geom_point(aes(color = as.factor(seurat_clusters))) +
+  theme_minimal() +
+  labs(y = "Expression level of AXL", x = "") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(colour = "black"),
+        panel.background = element_blank(),
+        axis.ticks = element_line(colour = "black"),
+        legend.position = "right") +
+  scale_x_discrete(expand = c(0.05, 0.05))
+
+scaling_factor <- max(data_filtered$AXL) / max(data_summary$Count)
+
+combined_plot <- plot1 +
+  geom_line(data = data_summary, aes(x = newclass, y = Count * scaling_factor), color = "black") +
+  geom_point(data = data_summary, aes(x = newclass, y = Count * scaling_factor), color = "black") +
+  scale_y_continuous(
+    name = "Expression level of AXL",
+    sec.axis = sec_axis(~ . / scaling_factor, name = "Number of Cells")
+  )
+
+# Save combined plot
+ggsave("Combined_AXL_expression_and_cell_count.png", plot = combined_plot, dpi = 300, width = 11, height = 8.5)
+
+
+# Cluster 0 Temporal Dynamics - Marker Genes: CLEC10A, CX3CR1, CD33
+
+# Load libraries
+library(dplyr)
+library(ggplot2)
+
+# Define the menstrual cycle stages
+stage_levels <- c("menstrual", "Early-pro", "Mid-pro", "Late-pro", "Early-sec", "Mid-sec", "Late-sec", "Late-Late-sec", "decb", "decp")
+
+# Function to extract, reshape, and plot expression of a marker gene across stages
+plot_gene_temporal <- function(seurat_obj, gene_name) {
+  data <- FetchData(seurat_obj, vars = c(gene_name, "newclass", "seurat_clusters")) %>%
+    filter(!!as.name(gene_name) > 0) %>%
+    mutate(
+      newclass = recode(as.character(newclass),
+                        "1" = "Early-pro", "2" = "Mid-pro", "3" = "Late-pro",
+                        "4" = "Early-sec", "5" = "Mid-sec", "6" = "Late-sec",
+                        "7" = "Late-Late-sec", "8" = "menstrual", "9" = "decb", "10" = "decp"),
+      newclass = factor(newclass, levels = stage_levels)
+    )
+  
+  # Count cells per stage
+  cell_counts <- data %>%
+    group_by(newclass) %>%
+    summarise(Count = n())
+  
+  # Create scatter plot for gene expression
+  scatter <- ggplot(data, aes(x = newclass, y = .data[[gene_name]])) +
+    geom_point(aes(color = as.factor(seurat_clusters)), alpha = 0.6) +
+    theme_minimal() +
+    labs(title = paste("Expression of", gene_name, "across Menstrual Stages"),
+         x = "Menstrual Stage", y = paste("Expression of", gene_name)) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  # Combine with secondary y-axis for cell count
+  scaling_factor <- max(data[[gene_name]]) / max(cell_counts$Count)
+  combined_plot <- scatter +
+    geom_line(data = cell_counts, aes(x = newclass, y = Count * scaling_factor, group = 1), color = "black") +
+    geom_point(data = cell_counts, aes(x = newclass, y = Count * scaling_factor), color = "black") +
+    scale_y_continuous(
+      name = paste("Expression level of", gene_name),
+      sec.axis = sec_axis(~ . / scaling_factor, name = "Number of Cells")
+    )
+  
+  return(combined_plot)
+}
+
+# Cluster 0 marker plots:
+plot_gene_temporal(DC_count_seurat, "CLEC10A")
+plot_gene_temporal(DC_count_seurat, "CX3CR1")
+plot_gene_temporal(DC_count_seurat, "CD33")
+
+# Cluster 1 marker plots:
+plot_gene_temporal(DC_count_seurat, "GZMB")
+plot_gene_temporal(DC_count_seurat, "IRF8")
+plot_gene_temporal(DC_count_seurat, "JCHAIN")
+
+# Cluster 2 marker plots:
+plot_gene_temporal(DC_count_seurat, "XCR1")
+plot_gene_temporal(DC_count_seurat, "CLEC9A")
+
+# Cluster 3 marker plots:
+plot_gene_temporal(DC_count_seurat, "PCLAF")
+plot_gene_temporal(DC_count_seurat, "PCNA")
+plot_gene_temporal(DC_count_seurat, "MKI67")
+
+# Receptor-Ligand Analysis Dot Plot (CellChat)
+library(CellChat)
+cellchat <- createCellChat(object = GetAssayData(DC_count_seurat, layer = "data", assay = "RNA"),
+                           meta = DC_count_seurat@meta.data %>% mutate(seurat_clusters = as.numeric(as.character(seurat_clusters)) + 1),
+                           group.by = "seurat_clusters")
+cellchat@DB <- subsetDB(CellChatDB.human, search = "Secreted Signaling")
+cellchat <- subsetData(cellchat)
+cellchat <- identifyOverExpressedGenes(cellchat)
+cellchat <- identifyOverExpressedInteractions(cellchat)
+cellchat <- computeCommunProb(cellchat, type = "truncatedMean", trim = 0.1)
+cellchat <- filterCommunication(cellchat, min.cells = 10)
+cellchat <- computeCommunProbPathway(cellchat)
+cellchat <- aggregateNet(cellchat)
+netVisual_bubble(cellchat, sources.use = NULL, targets.use = NULL, remove.isolate = TRUE)
+
+# ============================
+# 12. Co-expression and GO anlaysis
+# ============================
+library(tidyverse)
+library(Seurat)
+library(openxlsx)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(enrichplot)
+library(pheatmap)
+library(ggplot2)
+library(ggrepel)
+library(tidyr)
+```
+
+## 1. Co-expression Ratios in Clusters 0, 2, and 3
+
+# Fetch marker expression data
+data <- FetchData(DC_count_seurat, vars = c("AXL", "CD1C", "PCNA", "MKI67", "CLEC9A", "XCR1", "seurat_clusters", "newclass"))
+
+# Calculate co-expression in clusters 0, 2, 3
+coexpression_data <- data %>%
+  filter(seurat_clusters %in% c("0", "2", "3")) %>%
+  mutate(
+    AXL_CD1C = AXL > 0 & CD1C > 0,
+    AXL_PCNA = AXL > 0 & PCNA > 0,
+    AXL_XCR1 = AXL > 0 & XCR1 > 0
+  ) %>%
+  group_by(seurat_clusters) %>%
+  summarise(
+    Coexpress_AXL_CD1C = sum(AXL_CD1C),
+    Coexpress_AXL_PCNA = sum(AXL_PCNA),
+    Coexpress_AXL_XCR1 = sum(AXL_XCR1),
+    TotalCells = n(),
+    .groups = 'drop'
+  ) %>%
+  pivot_longer(cols = starts_with("Coexpress"), names_to = "Coexpression", values_to = "CellCount") %>%
+  mutate(Ratio = CellCount / TotalCells)
+
+coexpression_data$seurat_clusters <- factor(coexpression_data$seurat_clusters, levels = c("0", "3", "2"))
+
+# Plot co-expression ratios
+ggplot(coexpression_data, aes(x = seurat_clusters, y = Ratio, group = Coexpression, color = Coexpression)) +
+  geom_line(size = 1.5) +
+  geom_point() +
+  theme_minimal() +
+  labs(
+    title = "Ratio of Cells Co-expressing Genes in Selected Clusters",
+    x = "Seurat Clusters",
+    y = "Ratio of Cells",
+    color = "Co-expression"
+  ) +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14, face = "bold"),
+    plot.title = element_text(hjust = 0.5, size = 16)
+  )
+
+##GO analysis
+clusters <- Idents(DC_count_seurat)
+
+for (cluster in unique(clusters)) {
+  degs_df <- FindMarkers(DC_count_seurat, ident.1 = cluster, min.pct = 0.25, logfc.threshold = 0.25, only.pos = FALSE)
+  significant_degs_df <- degs_df[degs_df$p_val_adj < 0.05, , drop = FALSE]
+  
+  if (nrow(significant_degs_df) > 0) {
+    degs_list <- rownames(significant_degs_df)
+    entrez_ids <- tryCatch({
+      bitr(degs_list, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+    }, error = function(e) NULL)
+    
+    if (!is.null(entrez_ids) && nrow(entrez_ids) > 0) {
+      ego <- enrichGO(
+        gene = entrez_ids$ENTREZID,
+        OrgDb = org.Hs.eg.db,
+        ont = "BP",
+        pAdjustMethod = "BH",
+        qvalueCutoff = 0.05,
+        readable = TRUE
+      )
+      
+      if (length(ego) > 0) {
+        dotplot(ego, showCategory = 10) + ggtitle(paste("Top GO Terms for Cluster", cluster))
+      }
+    }
+  }
+}
