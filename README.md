@@ -67,10 +67,10 @@ install.packages(c(
 if (!requireNamespace("BiocManager", quietly=TRUE)) install.packages("BiocManager")
 BiocManager::install(c("clusterProfiler","org.Hs.eg.db","enrichplot"))
 
-# CellChat:
-# install.packages("CellChat")
-# or:
-# remotes::install_github("sqjin/CellChat")
+#CellChat:
+#install.packages("CellChat")
+#or:
+#remotes::install_github("sqjin/CellChat")
 
 5. Outputs
 QC & DR: PCA, elbow, UMAP, violin/scatter plots
