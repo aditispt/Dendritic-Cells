@@ -192,6 +192,100 @@ combined_plot <- plot1 +
 # Save combined plot
 ggsave("Combined_AXL_expression_and_cell_count.png", plot = combined_plot, dpi = 300, width = 11, height = 8.5)
 
+##Dual Y-axes / axis graphs
+##For LAMP3 gene
+# Assuming 'data' has been fetched as before
+data <- FetchData(DC_count_seurat, vars = c("LAMP3", "newclass", "seurat_clusters"))
+#To remove the cells with 0 expression levels
+data_filtered <- data %>% filter(LAMP3 > 0)
+
+# Map numeric values to class names in newclass
+data_filtered <- data_filtered %>%
+  mutate(newclass = case_when(
+    newclass == 1 ~ "Early-pro",
+    newclass == 2 ~ "Mid-pro",
+    newclass == 3 ~ "Late-pro",
+    newclass == 4 ~ "Early-sec",
+    newclass == 5 ~ "Mid-sec",
+    newclass == 6 ~ "Late-sec",
+    newclass == 7 ~ "Late-Late-sec",
+    newclass == 8 ~ "menstrual",
+    newclass == 9 ~ "decb",
+    newclass == 10 ~ "decp",
+    TRUE ~ as.character(newclass) # Keeps original value if none of the above
+  ))
+
+
+# Ordering factor levels for newclass according to the specified sequence
+data_filtered$newclass <- factor(data_filtered$newclass, levels = c(
+  "menstrual", "Early-pro", "Mid-pro", "Late-pro", 
+  "Early-sec", "Mid-sec", "Late-sec", "Late-Late-sec", 
+  "decb", "decp"
+))
+
+##Plotting the scatter plot
+plot1 <- ggplot(data_filtered, aes(x = newclass, y = LAMP3, group = 1)) +
+  geom_point(aes(color = as.factor(seurat_clusters))) + # Plot points colored by seurat_clusters
+  theme_minimal() +
+  labs(y = "Expression level of LAMP3", x = "") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 20),
+    axis.text.y = element_text(size = 20), # Add this line for y-axis tick labelling size
+    axis.title.y = element_text(size = 20), # Add this line for y-axis text size
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(colour = "black"),
+    panel.background = element_blank(),
+    axis.ticks = element_line(colour = "black"),
+    legend.position = "none"
+  ) +
+  scale_x_discrete(expand = c(0.05, 0.05)) +
+  scale_y_continuous(expand = c(0.05, 0.05))
+
+plot1
+
+#count number of cells for the 2nd y-axis
+data_summary <- data_filtered %>%
+  group_by(newclass) %>%
+  summarise(Count = n())
+
+# Assuming 'data_filtered' contains your CDH17 expression level data
+# And 'data_summary' contains your summarized count data
+
+# First, we create the scatter plot
+plot1 <- ggplot(data_filtered, aes(x = newclass, y = LAMP3)) +
+  geom_point(aes(color = as.factor(seurat_clusters))) +
+  theme_minimal() +
+  labs(y = "Expression level of LAMP3", x = "") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 20),
+    axis.text.y = element_text(size = 20), # Add this line for y-axis tick labelling size
+    axis.title.y = element_text(size = 20), # Add this line for y-axis text size
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(colour = "black"),
+    panel.background = element_blank(),
+    axis.ticks = element_line(colour = "black"),
+    legend.position = "right"
+  ) +
+  scale_x_discrete(expand = c(0.05, 0.05))
+
+# Then, determine the scaling factor for the secondary axis
+scaling_factor <- max(data_filtered$LAMP3) / max(data_summary$Count)
+
+# Now create the combined plot with both axes
+combined_plot <- plot1 +
+  geom_line(data = data_summary, aes(x = newclass, y = Count * scaling_factor, group =1), color = "black") +
+  geom_point(data = data_summary, aes(x = newclass, y = Count * scaling_factor), color = "black") +
+  scale_y_continuous(
+    name = "Expression level of LAMP3",
+    sec.axis = sec_axis(~ . / scaling_factor, name = "Number of Cells")
+  )
+
+# Render the combined plot
+print(combined_plot)
+
+
 
 # Cluster 0 Temporal Dynamics - Marker Genes: CLEC10A, CX3CR1, CD33
 
