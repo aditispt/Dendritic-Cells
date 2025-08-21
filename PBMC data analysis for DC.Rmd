@@ -1,0 +1,183 @@
+# Install and load necessary packages
+install.packages("Seurat")
+library(Seurat)
+
+install.packages("Matrix")  # Install if not already installed
+library(Matrix)
+
+#Read in the data
+pbmc<-read.delim("~/scrna_seq_pbmc_data/SCP43/other/raw_expression_matrix.txt")
+
+male_hsc<- readRDS("~/Desktop/Mor Lab/placental HSC data/seurat_male_cluster10.rds")
+female_hsc<-readRDS("~/Desktop/Mor Lab/placental HSC data/seurat_female_cluster10.rds")
+
+
+pbmc.data<- Read10X("~/Desktop/Mor Lab/PBMC_3k_data for CBI/filtered_gene_bc_matrices/hg19/")
+
+#Download required packages
+library(Seurat)
+library(tidyverse)
+library(ggpubr)
+library(Matrix)
+library(dplyr)
+library(patchwork)
+
+# check if there are duplicates in gene symbols
+table(duplicated(pbmc$Gene.ID)) 
+# there are 2 duplicates
+
+# convert duplicates to unique ids
+pbmc <- pbmc %>%
+mutate(Gene.ID = make.unique(Gene.ID)) %>%
+column_to_rownames("Gene.ID")
+
+#rownames(pbmc) <- pbmc$Gene.ID
+
+#Create a Seurat dataset
+pbmc_seurat <- CreateSeuratObject(counts = pbmc, project = "PBMC", min.cells=3, min.features=200)
+
+View(pbmc_seurat)
+
+#Find median UMI counts per cell
+median(pbmc_seurat@meta.data$nCount_RNA)
+
+#Find median genes per cell
+median(pbmc_seurat@meta.data$nFeature_RNA)
+
+#Find the Mitochondrial PCT%information and plot a graph
+pbmc_seurat[["percent.mt"]]<- PercentageFeatureSet(pbmc_seurat, pattern = "^MT-")
+
+#Add the mitochondrial PCT% information to the Metadata
+pbmc_seurat$percent.mt <- PercentageFeatureSet(pbmc_seurat, pattern = "^MT-")
+
+#No MT genes found in the given (pbmc) dataset
+VlnPlot(pbmc_seurat, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+#Make scatter plots to compare
+plot1 <- FeatureScatter (pbmc_seurat, feature1= "nCount_RNA", feature2= "nFeature_RNA")
+plot1
+
+#Log-transform the counts
+pbmc_seurat <- NormalizeData(pbmc_seurat)
+
+#Find variable Features
+pbmc_seurat <- FindVariableFeatures(pbmc_seurat)
+
+#Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(pbmc_seurat),10)
+
+#plot variable features with and without labels
+plot1 <- VariableFeaturePlot(pbmc_seurat)
+plot1 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1
+
+#Scale the Data
+pbmc_seurat <- ScaleData(pbmc_seurat)
+
+#Run PCA
+pbmc_seurat <- RunPCA(pbmc_seurat)  
+
+#Plot the PCA
+DimPlot(pbmc_seurat, reduction = "pca")
+
+#Plot the loadings
+VizDimLoadings(pbmc_seurat, dims=1:2, reduction ="pca")
+
+#Choose the number of principle components to keep
+ElbowPlot(pbmc_seurat)
+
+#Part 2: Nearest neighbor graph, clustering and embedding##
+
+#Find nearest neighbors and construct the graph
+pbmc_seurat <- FindNeighbors(pbmc_seurat, dims=1:10)
+
+#Find the clusters
+pbmc_seurat <- FindClusters(pbmc_seurat, resolution = 0.5)
+
+
+#Get the UMAP embedding (Dims is the number of PCA plots you want the R to consider (PCA #number can be found from Elbow plot))
+pbmc_seurat <- RunUMAP(pbmc_seurat, dims=1:10)
+
+#Plot the UMAP with all the clusters
+DimPlot(pbmc_seurat, reduction = "umap")
+
+FeaturePlot(pbmc_seurat, features = c("KLF4"))
+FeaturePlot(pbmc_seurat, features = c("CLEC9A"))
+FeaturePlot(pbmc_seurat, features = c("AXL"))
+FeaturePlot(pbmc_seurat, features = c("CX3CR1"))
+
+# Create an empty list to store marker dataframes for each cluster
+cluster_markers_list <- list()
+
+# Loop through clusters 0 to 6
+for (cluster_id in 0:7) {
+  cat("Finding markers for Cluster", cluster_id, "\n")
+  
+# Find markers for the current cluster
+  cluster_markers <- FindMarkers(pbmc_seurat, ident.1 = cluster_id, only.pos = TRUE,
+                                 logfc.threshold = 0.5, min.pct = 0.25)
+  
+# Keep the top 6 markers based on p-value
+  top_markers <- cluster_markers %>%
+    top_n(6, -log10(p_val))
+  
+# Store the top markers in the list
+  cluster_markers_list[[paste0("Cluster", cluster_id, "_markers")]] <- top_markers
+}
+
+##Make Bubble Plots
+bubble_features = rownames(bind_rows(cluster_markers_list, .id = "column_label"))
+
+DotPlot(object = pbmc_seurat, features = bubble_features) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+##Find All Markers for each cluster
+# Find all markers for Cluster 0
+cluster0.markers <- FindMarkers(pbmc_seurat, ident.1 = 0, min.pct = 0.25)
+
+# Export all markers for Cluster 0 to a text file
+write.table(cluster0.markers, file = "Cluster0_all_markers_pbmc.txt", sep = "\t")
+
+# Find all markers for Cluster 1
+cluster1.markers <- FindMarkers(pbmc_seurat, ident.1 = 1, min.pct = 0.25)
+
+# Export all markers for Cluster 1 to a text file
+write.table(cluster1.markers, file = "Cluster1_all_markers_pbmc.txt", sep = "\t")
+
+# Find all markers for Cluster 2
+cluster2.markers <- FindMarkers(pbmc_seurat, ident.1 = 2, min.pct = 0.25)
+
+# Export all markers for Cluster 2 to a text file
+write.table(cluster2.markers, file = "Cluster2_all_markers_pbmc.txt", sep = "\t")
+ 
+# Find all markers for Cluster 3
+cluster3.markers <- FindMarkers(pbmc_seurat, ident.1 = 3, min.pct = 0.25)
+
+# Export all markers for Cluster 3 to a text file
+write.table(cluster3.markers, file = "Cluster3_all_markers_pbmc.txt", sep = "\t")  
+
+# Find all markers for Cluster 4
+cluster4.markers <- FindMarkers(pbmc_seurat, ident.1 = 4, min.pct = 0.25)
+
+# Export all markers for Cluster 4 to a text file
+write.table(cluster4.markers, file = "Cluster4_all_markers_pbmc.txt", sep = "\t")  
+
+# Find all markers for Cluster 5
+cluster5.markers <- FindMarkers(pbmc_seurat, ident.1 = 5, min.pct = 0.25)
+
+# Export all markers for Cluster 5 to a text file
+write.table(cluster5.markers, file = "Cluster5_all_markers_pbmc.txt", sep = "\t")  
+
+# Find all markers for Cluster 6
+cluster6.markers <- FindMarkers(pbmc_seurat, ident.1 = 6, min.pct = 0.25)
+
+# Export all markers for Cluster 6 to a text file
+write.table(cluster6.markers, file = "Cluster6_all_markers_pbmc.txt", sep = "\t") 
+
+# Find all markers for Cluster 7
+cluster7.markers <- FindMarkers(pbmc_seurat, ident.1 = 7, min.pct = 0.25)
+
+# Export all markers for Cluster 7 to a text file
+write.table(cluster7.markers, file = "Cluster_all_markers_pbmc.txt", sep = "\t") 
+
+
