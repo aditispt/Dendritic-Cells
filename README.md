@@ -1,3 +1,13 @@
+# Decoding Functional and Developmental Trajectories of Tissue-Resident Uterine Dendritic Cells
+
+[📄 Paper (iScience, 2025)](https://www.cell.com/iscience/fulltext/S2589-0042(25)01612-8) •
+[📊 GEO: GSE288249](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE288249)
+
+Single-cell dendritic cell (uDC) workflow (R/Seurat) for preprocessing, clustering, stage-aware expression dynamics, CellChat receptor–ligand analysis, co-expression ratios, and GO enrichment.
+
+## Citation
+Singh A, Mor G, *et al.* **Decoding Functional and Developmental Trajectories of Uterine Dendritic Cells.** *iScience.* 2025. 
+
 # Dendritic-Cells
 ScRNAseq of dendritic cells
 
