@@ -13,35 +13,40 @@ ScRNAseq of dendritic cells
 
 Single-cell dendritic cell (uDC) workflow for preprocessing, clustering, stage-aware expression dynamics, CellChat receptor–ligand analysis, co-expression ratios, and GO enrichment.
 
-Contents
-1. Overview
-2. Input Data
-3. Pipeline Steps
-4. Quick Start
-5. Outputs
-6. Repo Structure
-7. Parameters & Notes
-8. Troubleshooting
-9. Reproducibility
-10. Citations
+# Contents  
+1. Overview  
+2. Input Data  
+3. Pipeline Steps  
+4. Quick Start  
+5. Outputs  
+6. Repo Structure  
+7. Parameters & Notes  
+8. Troubleshooting  
+9. Reproducibility  
+10. Citations  
 
+---
 
-1. Overview
-This repository hosts an R/Seurat pipeline to:
-Load count and stage metadata
-Build a Seurat object, perform QC, normalize, cluster, and run UMAP
-Visualize marker genes by cluster
-Analyze AXL and other markers across menstrual stages
-Run CellChat signaling analysis
-Compute co-expression ratios and GO enrichment per cluster
-Tested with Seurat v5-style calls (compatible with Seurat v4+).
+## 1. Overview  
+This repository hosts an R/Seurat pipeline to:  
+- Load count and stage metadata  
+- Build a Seurat object, perform QC, normalize, cluster, and run UMAP  
+- Visualize marker genes by cluster  
+- Analyze AXL and other markers across menstrual stages  
+- Run CellChat signaling analysis  
+- Compute co-expression ratios and GO enrichment per cluster  
 
-2. Counts and stage metadata are publicly available on GEO:
-GEO Accession: GSE288249
+Tested with Seurat v5-style calls (compatible with Seurat v4+).  
 
-Expected files:
-DC_count.txt — gene × cell matrix (rows = genes, columns = cells). Column names must match row names in DC_stage.txt.
-DC_stage.txt — rows = cells, includes column x with stage labels:
+---
+
+## 2. Input Data  
+Counts and stage metadata are publicly available on GEO:  
+**GEO Accession:** GSE288249  
+
+**Expected files:**  
+- `DC_count.txt` — gene × cell matrix (rows = genes, columns = cells). Column names must match row names in `DC_stage.txt`.  
+- `DC_stage.txt` — row metadata file with cell-level stage assignments. (includes column x with stage labels)  
 
 The script creates:
 newclass (1–10) mapping the above stages
