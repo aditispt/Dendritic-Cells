@@ -1,4 +1,4 @@
-# Decoding Functional and Developmental Trajectories of Tissue-Resident Uterine Dendritic Cells
+# Decoding Functional and Developmental Trajectories of Tissue-Resident Uterine Dendritic Cells 
 
 [📄 Paper (iScience, 2025)](https://www.cell.com/iscience/fulltext/S2589-0042(25)01612-8) •
 [📊 GEO: GSE288249](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE288249)
