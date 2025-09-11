@@ -13,7 +13,7 @@ ScRNAseq of dendritic cells
 
 Single-cell dendritic cell (uDC) workflow for preprocessing, clustering, stage-aware expression dynamics, CellChat receptor–ligand analysis, co-expression ratios, and GO enrichment.
 
-# Contents  
+# Contents 
 1. Overview  
 2. Input Data  
 3. Pipeline Steps  
