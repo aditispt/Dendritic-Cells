@@ -21,7 +21,7 @@ Single-cell dendritic cell (uDC) workflow for preprocessing, clustering, stage-a
 5. Outputs  
 6. Repo Structure  
 7. Parameters & Notes  
-8. Troubleshooting  
+8. Troubleshooting 
 9. Reproducibility  
 10. Citations  
 
